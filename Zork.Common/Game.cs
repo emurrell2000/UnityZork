@@ -12,6 +12,9 @@ namespace Zork
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
+        [JsonIgnore]
+        public static Game Instance { get; private set; }
+
         public World World { get; private set; }
 
         public string StartingLocation { get; set; }
@@ -25,9 +28,11 @@ namespace Zork
 
         public bool IsRunning { get; set; }
 
-        public IOutputService Output { get; set; }
+        [JsonIgnore]
+        public IInputService Input { get; private set; }
 
-        public IInputService Input { get; set; }
+        [JsonIgnore]
+        public IOutputService Output { get; private set; }
 
         [JsonIgnore]
         public Dictionary<string, Command> Commands { get; private set; }
@@ -45,97 +50,94 @@ namespace Zork
                 { "SOUTH", new Command("SOUTH", new string[] { "SOUTH", "S" }, game => Move(game, Directions.South)) },
                 { "EAST", new Command("EAST", new string[] { "EAST", "E"}, game => Move(game, Directions.East)) },
                 { "WEST", new Command("WEST", new string[] { "WEST", "W" }, game => Move(game, Directions.West)) },
+                { "SCORE", new Command("SCORE", new string[] { "SCORE", "SC" }, Score) },
+                { "REWARD", new Command("REWARD", new string[] { "REWARD", "R" }, Reward },
             };
         }
 
-        public void Run()
+        private void Score(Game game)
         {
-            // Console.WriteLine(string.IsNullOrWhiteSpace(WelcomeMessage) ? "Welcome to Zork!" : WelcomeMessage);
-            // 
-            // IsRunning = true;
-            // Room previousRoom = null;
-            // while (IsRunning)
-            // {
-            //     Console.WriteLine(Player.Location);
-            //     if (previousRoom != Player.Location)
-            //     {
-            //         Look(this);
-            //         previousRoom = Player.Location;
-            //     }
-            // 
-            //     Console.Write("\n> ");
-            //     string commandString = Console.ReadLine().Trim().ToUpper();
-            //     Command foundCommand = null;
-            //     foreach (Command command in Commands.Values)
-            //     {
-            //         if (command.Verbs.Contains(commandString))
-            //         {
-            //             foundCommand = command;
-            //             break;
-            //         }
-            //     }
-            // 
-            //     if (foundCommand != null)
-            //     {
-            //         foundCommand.Action(this);
-            //     }
-            //     else
-            //     {
-            //         Console.WriteLine("Unknown command.");
-            //     }
-            // }
-            // 
-            // Console.WriteLine(string.IsNullOrWhiteSpace(ExitMessage) ? "Thank you for playing!" : ExitMessage);
+            Output.WriteLine($"Your score is {Player.Score} in {Player.Moves} moves.");
+        }
+        private void Reward(Game game)
+        {
+            Player.Score++;
         }
 
-        public void Start(IInputService input, IOutputService output)
+        public static void StartFromFile(string gameFilename, IInputService input, IOutputService output)
         {
-            Assert.IsNotNull(input);
-            Input = input;
-            Input.InputRecieved += InputRecievedHandler;
+            if (!File.Exists(gameFilename))
+            {
+                throw new FileNotFoundException("Expected file.", gameFilename);
+            }
 
-            Assert.IsNotNull(output);
-            Output = output;
-
-            IsRunning = true;
+            Start(File.ReadAllText(gameFilename), input, output);
         }
 
-        private void InputRecievedHandler(object sender, string commandString)
+        public static void Start(string gameJsonString, IInputService input, IOutputService output)
         {
-            commandString = Console.ReadLine().Trim().ToUpper();
+            Instance = Load(gameJsonString);
+            Instance.Input = input;
+            Instance.Output = output;
+            Instance.DisplayWelcomeMessage();
+            Instance.IsRunning = true;
+            Instance.Input.InputRecieved += Instance.InputRecievedHandler;
+        }
+
+        private void InputRecievedHandler(object sender, string inputString)
+        {
             Command foundCommand = null;
             foreach (Command command in Commands.Values)
             {
-                if (command.Verbs.Contains(commandString))
+                if (command.Verbs.Contains(inputString))
                 {
                     foundCommand = command;
                     break;
                 }
             }
-
+            
             if (foundCommand != null)
             {
                 foundCommand.Action(this);
+                Player.Moves++;
             }
             else
             {
-                Console.WriteLine("Unknown command.");
+                Output.WriteLine("Unknown command.");
             }
+        }
+
+        public static Game Load(string jsonString)
+        {
+            Game game = JsonConvert.DeserializeObject<Game>(jsonString);
+
+            return game;
         }
 
         private static void Move(Game game, Directions direction)
         {
             if (game.Player.Move(direction) == false)
             {
-                Console.WriteLine("The way is shut!");
+                game.Output.WriteLine("The way is shut!");
             }
         }
 
-        public static void Look(Game game) => Console.WriteLine(game.Player.Location.Description);
+        public static void Look(Game game) => game.Output.WriteLine($"{game.Player.Location}\n {game.Player.Location.Description}");
 
-        private static void Quit(Game game) => game.IsRunning = false;
+        private static void Quit(Game game)
+        {
+            game.IsRunning = false;
+
+        }
+
+        private void DisplayWelcomeMessage() => Output.WriteLine(WelcomeMessage);
 
         [OnDeserialized]
-        private void OnDeserialized(StreamingContext context) => Player = new Player(World, StartingLocation);
+        private void OnDeserialized(StreamingContext context)
+        {
+            Player = new Player(World, StartingLocation);
+            Player.Moves = 0;
+            Player.Score = 0;
+        }
     }
 }

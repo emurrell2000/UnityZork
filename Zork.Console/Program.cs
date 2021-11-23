@@ -10,30 +10,22 @@ namespace Zork
             const string defaultGameFilename = "Zork.json";
             string gameFilename = args.Length > 0 ? args[(int)CommandLineArguments.GameFilename] : defaultGameFilename;
 
-            Game game = JsonConvert.DeserializeObject<Game>(File.ReadAllText(gameFilename));
+            // Game game = JsonConvert.DeserializeObject<Game>(File.ReadAllText(gameFilename));
 
             ConsoleInputService input = new ConsoleInputService();
             ConsoleOutputService output = new ConsoleOutputService();
 
-            output.WriteLine(game.WelcomeMessage);
+            Game.StartFromFile(gameFilename, input, output);
 
-            game.Start(input, output);
-
-            Room previousRoom = null;
-            while (game.IsRunning)
+            while (Game.Instance.IsRunning)
             {
-                output.WriteLine(game.Player.Location);
-                if (previousRoom != game.Player.Location)
-                {
-                    Game.Look(game);
-                    previousRoom = game.Player.Location;
-                }
-
-                output.Write("> ");
+                output.Write("\n> ");
                 input.ProcessInput();
             }
 
-            output.WriteLine(game.ExitMessage);
+            // output.WriteLine(game.WelcomeMessage);
+
+            output.WriteLine(Game.Instance.ExitMessage);
         }
 
         private enum CommandLineArguments
